@@ -72,3 +72,24 @@ variable "endpoints" {
   type        = list(string)
   description = "List of API endpoints"
 }
+
+variable "sql_version" {
+  description = "Version of the SQL Server"
+  type        = string
+}
+
+variable "sql_firewall_name" {
+  description = "Name of the SQL Server Firewall Rule"
+  type        = string
+}
+
+variable "db_collation" {
+  description = "Collation for the SQL Database"
+  type        = string
+}
+
+variable "db_size" {
+  description = "Maximum size of the SQL Database in GB"
+  type        = number
+
+}
