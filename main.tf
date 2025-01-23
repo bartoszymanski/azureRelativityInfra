@@ -6,6 +6,21 @@ resource "azurerm_resource_group" "projekt_rg" {
   name     = var.resource_group
   location = var.location
 }
+resource "azurerm_log_analytics_workspace" "example" {
+  name                = "workspace-relativity"
+  location            = azurerm_resource_group.projekt_rg.location
+  resource_group_name = azurerm_resource_group.projekt_rg.name
+  sku                 = "PerGB2018"
+  retention_in_days   = 30
+}
+
+resource "azurerm_application_insights" "example" {
+  name                = "relativity-appinsights"
+  location            = azurerm_resource_group.projekt_rg.location
+  resource_group_name = azurerm_resource_group.projekt_rg.name
+  workspace_id        = azurerm_log_analytics_workspace.example.id
+  application_type    = "web"
+}
 
 resource "azurerm_mssql_server" "server_sql" {
   name                         = var.sql_server_name
@@ -17,18 +32,18 @@ resource "azurerm_mssql_server" "server_sql" {
 }
 
 resource "azurerm_mssql_firewall_rule" "firewall_sql" {
-  name             = var.sql_firewall_name
-  server_id        = azurerm_mssql_server.server_sql.id
+  name                = var.sql_firewall_name
+  server_id           = azurerm_mssql_server.server_sql.id
   start_ip_address    = "0.0.0.0"
   end_ip_address      = "0.0.0.0"
 }
 
 resource "azurerm_mssql_database" "database_sql" {
-  name           = var.database_name
-  server_id      = azurerm_mssql_server.server_sql.id
-  collation      = var.db_collation
-  max_size_gb    = var.db_size
-  sku_name       = "Basic"
+  name                 = var.database_name
+  server_id            = azurerm_mssql_server.server_sql.id
+  collation            = var.db_collation
+  max_size_gb          = var.db_size
+  sku_name             = "Basic"
   storage_account_type = "Local"
 }
 
@@ -44,61 +59,54 @@ resource "azurerm_linux_web_app" "webapp" {
   name                = var.web_app_name
   location            = azurerm_resource_group.projekt_rg.location
   resource_group_name = azurerm_resource_group.projekt_rg.name
-  service_plan_id       = azurerm_service_plan.appserviceplan.id
-  depends_on            = [azurerm_service_plan.appserviceplan]
-  https_only            = true
+  service_plan_id     = azurerm_service_plan.appserviceplan.id
+  depends_on          = [azurerm_service_plan.appserviceplan]
+  https_only          = true
   site_config {
-    linux_fx_version = "PYTHON|3.10"
+    application_stack {
+      python_version = "3.10"
+    }
   }
 
   app_settings = {
-    DB_HOST     = azurerm_mysql_flexible_server.db_instance.fully_qualified_domain_name
-    DB_NAME     = azurerm_mysql_flexible_server_database.db.name
-    DB_USER     = var.sql_admin_username
-    DB_PASS     = var.sql_admin_password
-    SECRET_KEY  = var.flask_secret_key
-    SENDGRID_API_KEY = var.sendgrid_api_key
-    SENDGRID_EMAIL = var.sendgrid_email
+    DB_URI                          = "Driver={ODBC Driver 18 for SQL Server};Server=tcp:${azurerm_mssql_server.server_sql.fully_qualified_domain_name},1433;Database=${var.database_name};Uid=${var.sql_admin_username};Pwd=${var.sql_admin_password};Encrypt=yes;TrustServerCertificate=no;Connection Timeout=30;"
+    DB_USER                         = var.sql_admin_username
+    DB_PASS                         = var.sql_admin_password
+    SECRET_KEY                      = var.flask_secret_key
+    APPINSIGHTS_INSTRUMENTATION_KEY = azurerm_application_insights.example.instrumentation_key
   }
 }
 
-resource "azurerm_app_service_source_control" "sourcecontrol" {
-  app_id             = azurerm_linux_web_app.webapp.id
-  repo_url           = "https://github.com/bartoszymanski/azureRelativity"
-  branch             = "master"
-  use_manual_integration = true
-  use_mercurial      = false
+resource "azurerm_storage_account" "example" {
+  name                     = var.storage_name
+  resource_group_name      = azurerm_resource_group.projekt_rg.name
+  location                 = azurerm_resource_group.projekt_rg.location
+  account_tier             = "Standard"
+  account_replication_type = "LRS"
 }
 
-# resource "azurerm_logic_app_workflow" "daily_email_job" {
-#   name                = "example-daily-email-job"
-#   location            = azurerm_resource_group.example.location
-#   resource_group_name = azurerm_resource_group.example.name
+resource "azurerm_linux_function_app" "example" {
+  name                = var.function_app_name
+  resource_group_name = azurerm_resource_group.projekt_rg.name
+  location            = azurerm_resource_group.projekt_rg.location
 
-#   definition = <<DEFINITION
-# {
-#   "definition": {
-#     "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
-#     "actions": {
-#       "Http": {
-#         "inputs": {
-#           "method": "GET",
-#           "uri": "https://${azurerm_app_service.web_app.default_hostname}/trigger"
-#         },
-#         "runAfter": {}
-#       }
-#     },
-#     "triggers": {
-#       "Recurrence": {
-#         "recurrence": {
-#           "frequency": "Day",
-#           "interval": 1
-#         },
-#         "type": "Recurrence"
-#       }
-#     }
-#   },
-#   "parameters": {}
-# }
-# DEFINITION
-# }
+  storage_account_name       = azurerm_storage_account.example.name
+  storage_account_access_key = azurerm_storage_account.example.primary_access_key
+  service_plan_id            = azurerm_service_plan.appserviceplan.id
+
+  site_config {
+    application_stack {
+      python_version = "3.9"
+    }
+  }
+  app_settings = {
+    DB_URI                          = "Driver={ODBC Driver 17 for SQL Server};Server=tcp:${azurerm_mssql_server.server_sql.fully_qualified_domain_name},1433;Database=${var.database_name};Uid=${var.sql_admin_username};Pwd=${var.sql_admin_password};Encrypt=yes;TrustServerCertificate=no;Connection Timeout=30;"
+    APPINSIGHTS_INSTRUMENTATION_KEY = azurerm_application_insights.example.instrumentation_key
+    SENDGRID_API_KEY                = var.sendgrid_api_key
+    SENDGRID_EMAIL                  = var.sendgrid_email
+    COSMOS_KEY                      = "Nvntl4QZQlEAEC88Dl8hnUaC1dGlD5p80mDRxIWg1DkD1ZR4OsZuL9PsLzyLcNxlYBGCVL1RiOzTACDbFqveRg=="
+    COSMOS_ENDPOINT                 = "xd"
+    COSMOS_DATABASE                 = "xd"
+    COSMOS_CONTAINER                = "xd"
+  }
+}

@@ -93,3 +93,8 @@ variable "db_size" {
   type        = number
 
 }
+
+variable "storage_name" {
+  description = "Name of the Azure Storage Account"
+  type        = string
+}
