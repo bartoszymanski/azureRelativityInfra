@@ -98,3 +98,18 @@ variable "storage_name" {
   description = "Name of the Azure Storage Account"
   type        = string
 }
+
+variable "cosmosdb_account_name" {
+  description = "Name of the Azure CosmosDB Account"
+  type        = string
+}
+
+variable "cosmosdb_sqldb_name" {
+  description = "Name of the Azure CosmosDB SQL Database"
+  type        = string
+}
+
+variable "cosmosdb_container_name" {
+  description = "Name of the Azure CosmosDB Container"
+  type        = string
+}
